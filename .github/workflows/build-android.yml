@@ -1,0 +1,40 @@
+name: Build Android App
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build with Buildozer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3-pip git zip unzip
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade buildozer
+
+      - name: Build APK
+        working-directory: ./  # ضع هنا مسار مشروعك إذا لم يكن في الجذر
+        run: |
+          buildozer android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: bin/*.apk
