@@ -1,4 +1,5 @@
 name: Build Android APK
+
 on:
   push:
     branches: [main]
@@ -8,81 +9,60 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-
     env:
-      # ANDROID_HOME داخل workspace ليبقى داخل الـ runner
       ANDROID_HOME: ${{ github.workspace }}/android-sdk
-      # PATH الافتراضي سيتم توسيعه لاحقاً في خطوة التثبيت أيضاً
-      PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:${{ env.PATH }}
+      PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:$PATH
 
     steps:
+      # Checkout the repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Set up Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
+      # Install system packages
       - name: Install system packages
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential python3-pip git zip unzip wget openjdk-11-jdk
 
+      # Install Python packages
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install cython==0.29.36 buildozer
+          pip install --upgrade pip setuptools wheel
+          pip install cython buildozer
 
-      - name: Install Android SDK command-line tools and packages
+      # Install Android SDK command-line tools
+      - name: Install Android SDK
         run: |
-          set -eux
-          mkdir -p "$ANDROID_HOME"
-          cd "$ANDROID_HOME"
-
-          # download commandline tools and extract safely to a tmp dir
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O /tmp/cmdline-tools.zip
-          unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-extracted
-
-          # ensure structure: $ANDROID_HOME/cmdline-tools/latest/...
-          mkdir -p cmdline-tools
-          mkdir -p cmdline-tools/latest
-          # move contents (handles different zip layouts)
-          if [ -d /tmp/cmdline-tools-extracted/cmdline-tools ]; then
-            mv /tmp/cmdline-tools-extracted/cmdline-tools/* cmdline-tools/latest/ || true
-          else
-            mv /tmp/cmdline-tools-extracted/* cmdline-tools/latest/ || true
-          fi
-
-          # export PATH for this step (and subsequent steps inherit job env too)
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-
-          # accept licenses and install required packages
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          cd $ANDROID_HOME/cmdline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d temp
+          mkdir -p latest
+          mv temp/cmdline-tools/* latest/
+          rm -rf temp cmdline-tools.zip
           yes | sdkmanager --licenses
-
-          # install platform-tools, platforms and build-tools
           sdkmanager "platform-tools" "platforms;android-33" "build-tools;36.1.0"
 
-      - name: Verify sdkmanager and java
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          which sdkmanager || true
-          sdkmanager --version || true
-          java -version || true
+      # Debug: list files to check structure
+      - name: List project files
+        run: ls -R ./test_app
 
-      - name: Build APK (Buildozer)
-        # working-directory يجب أن يشير إلى المجلد الذي يحتوي buildozer.spec
-        # إذا buildozer.spec في جذر الريبو، اجعله '.' كما هو هنا.
-        working-directory: .
+      # Build APK
+      - name: Build APK
+        working-directory: ./test_app
         run: |
-          set -eux
-          # نظّف أي حالة سابقة (اختياري)
-          rm -rf ./.buildozer || true
           buildozer android debug
 
-      - name: Upload APK artifact
+      # Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: ./bin/*.apk
+          path: ./test_app/bin/*.apk
 
